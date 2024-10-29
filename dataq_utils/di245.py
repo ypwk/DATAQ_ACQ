@@ -162,7 +162,7 @@ def read_data(ser, channel_config, device_id, log_func):
                 if current_channel == num_channels:
                     current_channel = 0
                     log(temperature_buffer, channel_config, device_id, log_func)
-            time.sleep(0.1)  # Small delay to reduce CPU usage
+            # time.sleep(0.1)  # Small delay to reduce CPU usage
     except KeyboardInterrupt:
         print(f"Terminating data read for Device {device_id}...")
     finally:
@@ -209,7 +209,7 @@ def log_all_devices(channel_config, log_func):
             print("Stopping all devices...")
             stop_event.set()  # Signal all threads to stop
 
-        for thread in threads:
-            thread.join()
+        # for thread in threads:
+        #     thread.join()
     else:
         print("No connected DI-245 devices found.")

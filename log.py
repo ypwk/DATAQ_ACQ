@@ -16,8 +16,8 @@ def log(temperature_buffer, channel_config, device_id):
 
 
 def main():
-    # di245.log_all_devices([TC_TYPE, TC_TYPE, TC_TYPE, TC_TYPE], log)
-    di1100.log_all_devices(log)
+    di245.log_all_devices([TC_TYPE, TC_TYPE, TC_TYPE, TC_TYPE], log)
+    di1100.log_all_devices([0, 1, 2, 3], log)
 
 
 if __name__ == "__main__":
