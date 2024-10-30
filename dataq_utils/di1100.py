@@ -1,10 +1,6 @@
 import serial
 from serial.tools import list_ports
-import threading
 import time
-
-stop_event = threading.Event()  # Signal threads to stop
-print_lock = threading.Lock()  # Synchronize printing
 
 # Constants from the DI-1100 Protocol
 VID = 0x0683
@@ -56,8 +52,14 @@ def set_sample_rate(ser, divisor):
     send_command(ser, f"srate {divisor}")
 
 
-def read_data(ser, num_channels):
+def log(voltage_buffer, channel_config, device_id, log_func, print_lock):
+    with print_lock:  # Ensure only one thread prints at a time
+        log_func(voltage_buffer, channel_config, device_id)
+
+
+def read_data(ser, channel_config, device_id, log_func, stop_event, print_lock):
     """Read and print voltage readings from the DI-1100."""
+    num_channels = len(channel_config)
     try:
         while not stop_event.is_set():
             data = ser.read(2 * num_channels)  # Read bytes for all channels
@@ -75,8 +77,13 @@ def read_data(ser, num_channels):
                     ) * 10  # Scale to voltage range (-10V to 10V)
                     voltages.append(voltage)
 
-                with print_lock:  # Ensure thread-safe printing
-                    print(f"Voltages: {voltages}")  # Print voltage readings
+                log(
+                    voltages,
+                    channel_config,
+                    device_id,
+                    log_func,
+                    print_lock,
+                )
 
             time.sleep(0.1)  # Small delay to reduce CPU usage
     except Exception as e:
@@ -85,40 +92,17 @@ def read_data(ser, num_channels):
         stop_scanning(ser)
 
 
-def manage_device(port, channel_config, log):
+def manage_di1100_device(
+    port, device_id, channel_config, log_func, stop_event, print_lock
+):
     """Manage a single DI-1100 device."""
     ser = connect_to_device(port)
     if ser:
         try:
-            stop_scanning(ser)  # Ensure scanning is stopped
+            stop_scanning(ser)
             configure_scan_list(ser, channel_config)
             set_sample_rate(ser, 60000)  # 10 Hz sample rate
             start_scanning(ser)
-            read_data(ser, len(channel_config))
+            read_data(ser, channel_config, device_id, log_func, stop_event, print_lock)
         finally:
             ser.close()
-
-
-def log_all_devices(channel_config, log):
-    """Initialize and manage multiple DI-1100 devices."""
-    ports = find_di1100_ports()
-    if ports:
-        threads = []
-        for i, port in enumerate(ports):
-            thread = threading.Thread(
-                target=manage_device, args=(port, channel_config, log)
-            )
-            threads.append(thread)
-            thread.start()
-
-        try:
-            while any(thread.is_alive() for thread in threads):
-                time.sleep(1)  # Keep main thread alive while others run
-        except KeyboardInterrupt:
-            print("Stopping all devices...")
-            stop_event.set()
-
-        # for thread in threads:
-        #     thread.join()
-    else:
-        print("No connected DI-1100 devices found.")

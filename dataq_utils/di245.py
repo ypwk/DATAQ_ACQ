@@ -1,10 +1,5 @@
 import serial
 from serial.tools import list_ports
-import time
-import threading
-
-stop_event = threading.Event()  # Event to signal threads to stop
-print_lock = threading.Lock()  # Lock to synchronize printing
 
 
 def send_command(ser, command):
@@ -116,12 +111,12 @@ def stop_scanning(ser):
     ser.write(b"\x00S0")
 
 
-def log(temperature_buffer, channel_config, device_id, log_func):
+def log(temperature_buffer, channel_config, device_id, log_func, print_lock):
     with print_lock:  # Ensure only one thread prints at a time
         log_func(temperature_buffer, channel_config, device_id)
 
 
-def read_data(ser, channel_config, device_id, log_func):
+def read_data(ser, channel_config, device_id, log_func, stop_event, print_lock):
     num_channels = len(channel_config)
     ser.read_until(b"S1")  # Sync with data stream
     current_channel = 0
@@ -161,7 +156,13 @@ def read_data(ser, channel_config, device_id, log_func):
 
                 if current_channel == num_channels:
                     current_channel = 0
-                    log(temperature_buffer, channel_config, device_id, log_func)
+                    log(
+                        temperature_buffer,
+                        channel_config,
+                        device_id,
+                        log_func,
+                        print_lock,
+                    )
             # time.sleep(0.1)  # Small delay to reduce CPU usage
     except KeyboardInterrupt:
         print(f"Terminating data read for Device {device_id}...")
@@ -169,7 +170,9 @@ def read_data(ser, channel_config, device_id, log_func):
         stop_scanning(ser)
 
 
-def manage_device(port, device_id, channel_config, log_func):
+def manage_di245_device(
+    port, device_id, channel_config, log_func, stop_event, print_lock
+):
     """Manages a single device: connect, configure, and read data."""
     ser = connect_to_device(port)
     if ser:
@@ -183,33 +186,8 @@ def manage_device(port, device_id, channel_config, log_func):
 
         print(f"Reading data from Device {device_id}...")
         try:
-            read_data(ser, channel_config, device_id, log_func)
+            read_data(ser, channel_config, device_id, log_func, stop_event, print_lock)
         finally:
             stop_scanning(ser)
             ser.close()
             print(f"Connection closed for Device {device_id}.")
-
-
-def log_all_devices(channel_config, log_func):
-    ports = find_di245_ports()
-    if ports:
-        threads = []
-
-        for i, port in enumerate(ports):
-            thread = threading.Thread(
-                target=manage_device, args=(port, i, channel_config, log_func)
-            )
-            threads.append(thread)
-            thread.start()
-
-        try:
-            while any(thread.is_alive() for thread in threads):
-                time.sleep(1)  # Keep main thread alive while others run
-        except KeyboardInterrupt:
-            print("Stopping all devices...")
-            stop_event.set()  # Signal all threads to stop
-
-        # for thread in threads:
-        #     thread.join()
-    else:
-        print("No connected DI-245 devices found.")
