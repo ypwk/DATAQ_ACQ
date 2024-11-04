@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-aqpdatavis-dev-174844-authRole",
+      "UnauthRoleArn": "arn:aws:iam::730335412791:role/amplify-aqpdatavis-dev-174844-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::730335412791:role/amplify-aqpdatavis-dev-174844-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-aqpdatavis-dev-174844-deployment",
+      "UnauthRoleName": "amplify-aqpdatavis-dev-174844-unauthRole",
+      "StackName": "amplify-aqpdatavis-dev-174844",
+      "StackId": "arn:aws:cloudformation:us-west-2:730335412791:stack/amplify-aqpdatavis-dev-174844/ed249920-9a4e-11ef-8876-06aadc106b3d",
+      "AmplifyAppId": "d3dpgklgqvf9v2"
+    },
+    "categories": {
+      "policy": {
+        "s3Auth": {}
+      }
+    }
+  }
+}
