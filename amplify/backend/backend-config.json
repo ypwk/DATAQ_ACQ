@@ -1,8 +1,0 @@
-{
-  "policy": {
-    "s3Auth": {
-      "providerPlugin": "awscloudformation",
-      "service": "iam"
-    }
-  }
-}
