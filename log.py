@@ -10,8 +10,8 @@ import boto3
 
 TC_TYPE = "K"  # Thermocouple type for DI-245
 LOG_FILE = "data/device_readings.csv"  # Output file path
-TIME_PER_LOG = timedelta(minutes=1)
-TIME_PER_UPLOAD = timedelta(minutes=5)
+TIME_PER_LOG = timedelta(seconds=10)
+TIME_PER_UPLOAD = timedelta(minutes=1)
 VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
 REGION_NAME = "us-west-2"
@@ -43,15 +43,17 @@ def initialize_log_file():
     if not os.path.exists(LOG_FILE):
         with open(LOG_FILE, mode="w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["Timestamp", "Device Type", "Channel", "Type", "Value"])
+            writer.writerow(
+                ["Timestamp", "Device Name", "Device ID", "Channel", "Value"]
+            )
 
 
-def log_to_file(device_id, device_type, channel_type, value):
+def log_to_file(device_id, device_type, channel, value):
     """Log readings to a CSV file."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_FILE, mode="a", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([timestamp, device_type, device_id, channel_type, value])
+        writer.writerow([timestamp, device_type, device_id, channel, value])
 
 
 def log_temperature(temperature_buffer, channel_config, device_id):
@@ -66,7 +68,7 @@ def log_temperature(temperature_buffer, channel_config, device_id):
         for i, temp in enumerate(temperature_buffer):
             channel_type = channel_config[i]
             verboseprint(f"{i:<10}{channel_type:<10}{temp:<15.2f}")
-            log_to_file(device_id, "DI-245", channel_type, temp)
+            log_to_file(device_id, "DI-245", i, temp)
 
     verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -83,9 +85,8 @@ def log_voltage(voltage_buffer, channel_config, device_id):
     if current_time - TIME_PER_LOG > last_log_time[device_id]:
         last_log_time[device_id] = current_time
         for i, voltage in enumerate(voltage_buffer):
-            channel_type = f"CH-{channel_config[i]}"
-            verboseprint(f"{i:<10}{channel_type:<10}{voltage:<15.2f}")
-            log_to_file(device_id, "DI-1100", channel_type, voltage)
+            verboseprint(f"{i:<10}{channel_config[i]:<10}{voltage:<15.2f}")
+            log_to_file(device_id, "DI-1100", channel_config[i], voltage)
 
     verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
