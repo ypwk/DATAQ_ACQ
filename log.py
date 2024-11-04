@@ -10,8 +10,8 @@ import boto3
 
 TC_TYPE = "K"  # Thermocouple type for DI-245
 LOG_FILE = "data/device_readings.csv"  # Output file path
-TIME_PER_LOG = timedelta(seconds=10)
-TIME_PER_UPLOAD = timedelta(minutes=1)
+TIME_PER_LOG = timedelta(minutes=1)
+TIME_PER_UPLOAD = timedelta(minutes=5)
 VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
 REGION_NAME = "us-west-1"
