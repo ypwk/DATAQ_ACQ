@@ -1,19 +1,44 @@
 from dataq_utils.di245 import manage_di245_device, find_di245_ports
 from dataq_utils.di1100 import manage_di1100_device, find_di1100_ports
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import os
 import threading
 import time
 
+import boto3
+
 TC_TYPE = "K"  # Thermocouple type for DI-245
-LOG_FILE = "device_readings.csv"  # Output file path
+LOG_FILE = "data/device_readings.csv"  # Output file path
+TIME_PER_LOG = timedelta(minutes=1)
+TIME_PER_UPLOAD = timedelta(minutes=5)
+VERBOSE = False
+BUCKET_NAME = "aqp-readout-data"
+REGION_NAME = "us-west-2"
 
 stop_event = threading.Event()
 print_lock = threading.Lock()
 
+last_log_time = []
+last_upload_time = datetime.now()
+current_device_index = 0
 
-# Ensure the log file exists and has headers
+verboseprint = print if VERBOSE else lambda *a, **k: None
+
+s3_client = boto3.client("s3", region_name=REGION_NAME)
+
+
+def upload_file_to_s3(file_name, bucket_name):
+    global last_upload_time
+    if datetime.now() - TIME_PER_UPLOAD > last_upload_time:
+        last_upload_time = datetime.now()
+        try:
+            s3_client.upload_file(file_name, bucket_name, file_name)
+            print(f"File {file_name} uploaded successfully to {bucket_name}")
+        except Exception as e:
+            print(f"Failed to upload {file_name} to S3: {e}")
+
+
 def initialize_log_file():
     if not os.path.exists(LOG_FILE):
         with open(LOG_FILE, mode="w", newline="") as f:
@@ -31,44 +56,61 @@ def log_to_file(device_id, device_type, channel_type, value):
 
 def log_temperature(temperature_buffer, channel_config, device_id):
     """Log temperature readings from DI-245."""
-    print(f"\nDevice {device_id} - Temperature Readings:")
-    print(f"{'Channel':<10}{'Type':<10}{'Temperature (°C)':<15}")
-    for i, temp in enumerate(temperature_buffer):
-        channel_type = channel_config[i]
-        print(f"{i:<10}{channel_type:<10}{temp:<15.2f}")
-        log_to_file(device_id, "DI-245", channel_type, temp)
+    global last_log_time
+    verboseprint(f"\nDevice {device_id} - Temperature Readings:")
+    verboseprint(f"{'Channel':<10}{'Type':<10}{'Temperature (°C)':<15}")
 
-    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    current_time = datetime.now()
+    if current_time - TIME_PER_LOG > last_log_time[device_id]:
+        last_log_time[device_id] = current_time
+        for i, temp in enumerate(temperature_buffer):
+            channel_type = channel_config[i]
+            verboseprint(f"{i:<10}{channel_type:<10}{temp:<15.2f}")
+            log_to_file(device_id, "DI-245", channel_type, temp)
+
+    verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    upload_file_to_s3(LOG_FILE, BUCKET_NAME)
 
 
 def log_voltage(voltage_buffer, channel_config, device_id):
     """Log voltage readings from DI-1100."""
-    print(f"\nDevice {device_id} - Voltage Readings:")
-    print(f"{'Channel':<10}{'Type':<10}{'Voltage (V)':<15}")
-    for i, voltage in enumerate(voltage_buffer):
-        channel_type = f"CH-{channel_config[i]}"
-        print(f"{i:<10}{channel_type:<10}{voltage:<15.2f}")
-        log_to_file(device_id, "DI-1100", channel_type, voltage)
+    global last_log_time
+    verboseprint(f"\nDevice {device_id} - Voltage Readings:")
+    verboseprint(f"{'Channel':<10}{'Type':<10}{'Voltage (V)':<15}")
 
-    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    current_time = datetime.now()
+    if current_time - TIME_PER_LOG > last_log_time[device_id]:
+        last_log_time[device_id] = current_time
+        for i, voltage in enumerate(voltage_buffer):
+            channel_type = f"CH-{channel_config[i]}"
+            verboseprint(f"{i:<10}{channel_type:<10}{voltage:<15.2f}")
+            log_to_file(device_id, "DI-1100", channel_type, voltage)
+
+    verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    upload_file_to_s3(LOG_FILE, BUCKET_NAME)
 
 
 def start_device_threads(devices, manage_device_func, channel_config, dev_type):
     """Start threads for managing devices."""
     log_type = {"di245": log_temperature, "di1100": log_voltage}
     threads = []
-    for i, device in enumerate(devices):
+    global current_device_index, last_log_time
+    for _, device in enumerate(devices):
         thread = threading.Thread(
             target=manage_device_func,
             args=(
                 device,
-                i,
+                current_device_index,
                 channel_config,
                 log_type[dev_type],
                 stop_event,
                 print_lock,
             ),
         )
+        current_device_index += 1
+        last_log_time.append(datetime.now())
         threads.append(thread)
         thread.start()
 
