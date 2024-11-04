@@ -14,7 +14,7 @@ TIME_PER_LOG = timedelta(seconds=10)
 TIME_PER_UPLOAD = timedelta(minutes=1)
 VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
-REGION_NAME = "us-west-2"
+REGION_NAME = "us-west-1"
 
 stop_event = threading.Event()
 print_lock = threading.Lock()
