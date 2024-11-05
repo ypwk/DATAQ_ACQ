@@ -35,7 +35,7 @@ amplify_outputs*
 amplifyconfiguration*
 
 
-.aws/credentials
+.aws/*
 
 #amplify-do-not-edit-begin
 amplify/\#current-cloud-backend
@@ -58,3 +58,6 @@ amplifytools.xcconfig
 .secret-*
 **.sample
 #amplify-do-not-edit-end
+
+*/__pycache__/*
+data/*
