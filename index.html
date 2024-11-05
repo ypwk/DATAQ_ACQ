@@ -20,9 +20,8 @@
         color: #333;
       }
       canvas {
-        width: 100%; /* Adjust width for responsiveness */
-        max-width: 1200px; /* Increased max-width for larger display */
-        height: 400px; /* Set height to make the charts shorter */
+        width: 50%; /* Adjust width for responsiveness */
+        height: 40%; /* Set height to make the charts shorter */
         margin: auto;
         margin-bottom: 40px; /* Add space between charts */
       }
@@ -30,9 +29,9 @@
   </head>
   <body>
     <h1>Thermocouple + Pressure Data</h1>
-    <h2>Pressure Data</h2>
+    <h2>Pressure Data — mbar</h2>
     <canvas id="di1100Chart"></canvas>
-    <h2>Thermocouple Data</h2>
+    <h2>Thermocouple Data — Celsius</h2>
     <canvas id="di245Chart"></canvas>
 
     <script>
@@ -67,8 +66,8 @@
                   di1100Datasets[key] = {
                     label: key,
                     data: [],
-                    borderColor: getRandomColor(),
-                    backgroundColor: "rgba(75, 192, 192, 0.2)",
+                    borderColor: "rgba(0, 0, 0, 0.8)",
+                    backgroundColor: getRandomColor(),
                     borderWidth: 1,
                   };
                 }
@@ -81,8 +80,8 @@
                   di245Datasets[key] = {
                     label: key,
                     data: [],
-                    borderColor: getRandomColor(),
-                    backgroundColor: "rgba(192, 75, 192, 0.2)",
+                    borderColor: "rgba(0, 0, 0, 0.8)",
+                    backgroundColor: getRandomColor(),
                     borderWidth: 1,
                   };
                 }
@@ -137,16 +136,11 @@
           options: {
             responsive: true,
             maintainAspectRatio: true,
-            plugins: {
-              tooltip: {
-                enabled: true,
-                mode: "nearest",
-                intersect: false,
-                callbacks: {
-                  title: (tooltipItems) => `Time: ${tooltipItems[0].label}`,
-                  label: (tooltipItem) =>
-                    `${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
-                },
+            tooltips: {
+              enabled: true,
+              callbacks: {
+                label: (tooltipItem, data) =>
+                  `Time: ${tooltipItems[0].label}, ${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
               },
             },
             scales: {
@@ -154,7 +148,7 @@
                 type: "time",
                 time: {
                   unit: "minute",
-                  tooltipFormat: "MMM DD, YYYY HH:mm:ss",
+                  tooltipFormat: "MMM dd, yyyy HH:mm:ss",
                   displayFormats: {
                     minute: "HH:mm:ss",
                   },
@@ -176,17 +170,15 @@
           },
           options: {
             responsive: true,
+            hover: {
+              mode: "label",
+            },
             maintainAspectRatio: true,
-            plugins: {
-              tooltip: {
-                enabled: true,
-                mode: "nearest",
-                intersect: false,
-                callbacks: {
-                  title: (tooltipItems) => `Time: ${tooltipItems[0].label}`,
-                  label: (tooltipItem) =>
-                    `${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
-                },
+            tooltips: {
+              enabled: true,
+              callbacks: {
+                label: (tooltipItem, data) =>
+                  `Time: ${tooltipItems[0].label}, ${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
               },
             },
             scales: {
@@ -194,7 +186,7 @@
                 type: "time",
                 time: {
                   unit: "minute",
-                  tooltipFormat: "MMM DD, YYYY HH:mm:ss",
+                  tooltipFormat: "MMM dd, yyyy HH:mm:ss",
                   displayFormats: {
                     minute: "HH:mm:ss",
                   },

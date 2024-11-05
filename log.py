@@ -75,18 +75,19 @@ def log_temperature(temperature_buffer, channel_config, device_id):
     upload_file_to_s3(LOG_FILE, BUCKET_NAME)
 
 
-def log_voltage(voltage_buffer, channel_config, device_id):
+def log_pressure(voltage_buffer, channel_config, device_id):
     """Log voltage readings from DI-1100."""
     global last_log_time
-    verboseprint(f"\nDevice {device_id} - Voltage Readings:")
-    verboseprint(f"{'Channel':<10}{'Type':<10}{'Voltage (V)':<15}")
+    verboseprint(f"\nDevice {device_id} - Pressure Readings:")
+    verboseprint(f"{'Channel':<10}{'Type':<10}{'Pressure (mbar)':<15}")
 
     current_time = datetime.now()
     if current_time - TIME_PER_LOG > last_log_time[device_id]:
         last_log_time[device_id] = current_time
-        for i, voltage in enumerate(voltage_buffer):
-            verboseprint(f"{i:<10}{channel_config[i]:<10}{voltage:<15.2f}")
-            log_to_file(device_id, "DI-1100", channel_config[i], voltage)
+        # for i, voltage in enumerate(voltage_buffer):
+        mbar = 10 ** ((voltage_buffer[0] - 7.75) / 0.75)
+        verboseprint(f"{0:<10}{channel_config[0]:<10}{mbar:<15.2f}")
+        log_to_file(device_id, "DI-1100", channel_config[0], voltage_buffer[0])
 
     verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -95,7 +96,7 @@ def log_voltage(voltage_buffer, channel_config, device_id):
 
 def start_device_threads(devices, manage_device_func, channel_config, dev_type):
     """Start threads for managing devices."""
-    log_type = {"di245": log_temperature, "di1100": log_voltage}
+    log_type = {"di245": log_temperature, "di1100": log_pressure}
     threads = []
     global current_device_index, last_log_time
     for _, device in enumerate(devices):
