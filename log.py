@@ -10,7 +10,7 @@ import boto3
 
 TC_TYPE = "K"  # Thermocouple type for DI-245
 LOG_FILE = "data/device_readings.csv"  # Output file path
-TIME_PER_LOG = timedelta(minutes=1)
+TIME_PER_LOG = timedelta(seconds=5  )
 TIME_PER_UPLOAD = timedelta(minutes=5)
 VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
@@ -85,6 +85,7 @@ def log_pressure(voltage_buffer, channel_config, device_id):
     if current_time - TIME_PER_LOG > last_log_time[device_id]:
         last_log_time[device_id] = current_time
         # for i, voltage in enumerate(voltage_buffer):
+        print(voltage_buffer[0])
         mbar = 10 ** ((voltage_buffer[0] - 7.75) / 0.75)
         verboseprint(f"{0:<10}{channel_config[0]:<10}{mbar:<15.2f}")
         log_to_file(device_id, "DI-1100", channel_config[0], voltage_buffer[0])
