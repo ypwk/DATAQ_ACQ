@@ -10,7 +10,7 @@ import boto3
 
 TC_TYPE = "K"  # Thermocouple type for DI-245
 LOG_FILE = "data/device_readings.csv"  # Output file path
-TIME_PER_LOG = timedelta(seconds=5)
+TIME_PER_LOG = timedelta(minutes=1)
 TIME_PER_UPLOAD = timedelta(minutes=5)
 VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
@@ -34,7 +34,7 @@ def upload_file_to_s3(file_name, bucket_name):
         last_upload_time = datetime.now()
         try:
             s3_client.upload_file(file_name, bucket_name, file_name)
-            print(f"File {file_name} uploaded successfully to {bucket_name}")
+            verboseprint(f"File {file_name} uploaded successfully to {bucket_name}")
         except Exception as e:
             print(f"Failed to upload {file_name} to S3: {e}")
 

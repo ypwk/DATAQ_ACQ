@@ -1,208 +1,235 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CSV Data Plot</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-    <!-- Added Date Adapter -->
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        text-align: center;
-        background-color: #f4f4f4;
-        margin: 0;
-        padding: 20px;
-      }
-      h1 {
-        color: #333;
-      }
-      canvas {
-        width: 50%; /* Adjust width for responsiveness */
-        height: 40%; /* Set height to make the charts shorter */
-        margin: auto;
-        margin-bottom: 40px; /* Add space between charts */
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Thermocouple + Pressure Data</h1>
-    <h2>Pressure Data — mbar</h2>
-    <canvas id="di1100Chart"></canvas>
-    <h2>Thermocouple Data — Celsius</h2>
-    <canvas id="di245Chart"></canvas>
 
-    <script>
-      let di1100Chart, di245Chart; // Global variables to store the chart instances
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV Data Plot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <!-- Added Date Adapter -->
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
 
-      // Function to fetch and parse CSV data
-      async function fetchCSVData() {
-        try {
-          // Fetch the CSV file from the S3 bucket
-          const response = await fetch(
-            "https://aqp-readout-data.s3.us-west-1.amazonaws.com/data/device_readings.csv"
-          );
+    h1 {
+      color: #333;
+    }
 
-          const data = await response.text();
+    canvas {
+      width: 50%;
+      /* Adjust width for responsiveness */
+      height: 40%;
+      /* Set height to make the charts shorter */
+      margin: auto;
+      margin-bottom: 40px;
+      /* Add space between charts */
+    }
+  </style>
+</head>
 
-          // Parse CSV data
-          const rows = data.split("\n").map((row) => row.split(","));
-          const timestamps = [];
-          const di1100Datasets = {};
-          const di245Datasets = {};
+<body>
+  <h1>Thermocouple + Pressure Data</h1>
+  <h2>Pressure Data — mbar</h2>
+  <canvas id="di1100Chart"></canvas>
+  <h2>Thermocouple Data — Celsius</h2>
+  <canvas id="di245Chart"></canvas>
 
-          // Iterate over the rows and separate data into DI-1100 and DI-245 datasets
-          for (let i = 1; i < rows.length; i++) {
-            const [timestamp, deviceType, channel, type, value] = rows[i];
-            if (!isNaN(parseFloat(value))) {
-              if (!timestamps.includes(timestamp)) {
-                timestamps.push(timestamp);
+  <script>
+    let di1100Chart, di245Chart; // Global variables to store the chart instances
+
+    // Function to fetch and parse CSV data
+    async function fetchCSVData() {
+      try {
+        // Fetch the CSV file from the S3 bucket
+        const response = await fetch(
+          "https://aqp-readout-data.s3.us-west-1.amazonaws.com/data/device_readings.csv"
+        );
+
+        const data = await response.text();
+
+        // Parse CSV data
+        const rows = data.split("\n").map((row) => row.split(","));
+        const timestamps = [];
+        const di1100Datasets = {};
+        const di245Datasets = {};
+        const tcNames = {
+          "DI-245 - 1 - 0": "Ion Pump 2 Secondary",
+          "DI-245 - 1 - 1": "Ion Pump 1 Flange",
+          "DI-245 - 1 - 2": "Glass Cell 2",
+          "DI-245 - 1 - 3": "Main Body",
+          "DI-245 - 2 - 0": "Ion Pump 1",
+          "DI-245 - 2 - 1": "Ion Pump 2",
+          "DI-245 - 2 - 2": "Glass Cell 1",
+          "DI-245 - 2 - 3": "Titanium Pump"
+        }
+
+        // Iterate over the rows and separate data into DI-1100 and DI-245 datasets
+        for (let i = 1; i < rows.length; i++) {
+          const [timestamp, deviceType, channel, type, value] = rows[i];
+          if (!isNaN(parseFloat(value))) {
+            if (!timestamps.includes(timestamp)) {
+              timestamps.push(timestamp);
+            }
+            const key = `${deviceType} - ${channel} - ${type}`;
+            if (deviceType === "DI-1100") {
+              if (!di1100Datasets[key]) {
+                di1100Datasets[key] = {
+                  label: key,
+                  data: [],
+                  borderColor: "rgba(0, 0, 0, 0.8)",
+                  backgroundColor: getColorKey(key),
+                  borderWidth: 1,
+                };
               }
-              const key = `${deviceType} - ${channel} - ${type}`;
-              if (deviceType === "DI-1100") {
-                if (!di1100Datasets[key]) {
-                  di1100Datasets[key] = {
-                    label: key,
-                    data: [],
-                    borderColor: "rgba(0, 0, 0, 0.8)",
-                    backgroundColor: getRandomColor(),
-                    borderWidth: 1,
-                  };
-                }
-                di1100Datasets[key].data.push({
-                  x: timestamp,
-                  y: parseFloat(value),
-                });
-              } else if (deviceType === "DI-245") {
-                if (!di245Datasets[key]) {
-                  di245Datasets[key] = {
-                    label: key,
-                    data: [],
-                    borderColor: "rgba(0, 0, 0, 0.8)",
-                    backgroundColor: getRandomColor(),
-                    borderWidth: 1,
-                  };
-                }
-                di245Datasets[key].data.push({
-                  x: timestamp,
-                  y: parseFloat(value),
-                });
+              di1100Datasets[key].data.push({
+                x: timestamp,
+                y: parseFloat(value),
+              });
+            } else if (deviceType === "DI-245") {
+              if (!di245Datasets[key]) {
+                di245Datasets[key] = {
+                  label: tcNames[key],
+                  data: [],
+                  borderColor: "rgba(0, 0, 0, 0.8)",
+                  backgroundColor: getColorKey(key),
+                  borderWidth: 1,
+                };
               }
+              di245Datasets[key].data.push({
+                x: timestamp,
+                y: parseFloat(value),
+              });
             }
           }
-
-          return {
-            labels: timestamps,
-            di1100Datasets: Object.values(di1100Datasets),
-            di245Datasets: Object.values(di245Datasets),
-          };
-        } catch (error) {
-          console.error("Error fetching CSV data:", error);
         }
+
+        return {
+          labels: timestamps,
+          di1100Datasets: Object.values(di1100Datasets),
+          di245Datasets: Object.values(di245Datasets),
+        };
+      } catch (error) {
+        console.error("Error fetching CSV data:", error);
+      }
+    }
+
+    // Function to generate a random color for each dataset
+    function getColorKey(key) {
+        // FNV-1a hash function (a popular hash function with a good distribution)
+      let hash = 2166136261;
+      for (let i = 0; i < key.length; i++) {
+        hash ^= key.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+      }
+      
+      // Use modulo 255 to ensure values stay within 0-255 range for RGB
+      const r = (hash >> 16) & 0xFF;
+      const g = (hash >> 8) & 0xFF;
+      const b = hash & 0xFF;
+
+      return `rgba(${r}, ${g}, ${b}, 1)`;
+    }
+
+    // Function to create or update the charts
+    async function createCharts() {
+      const { labels, di1100Datasets, di245Datasets } = await fetchCSVData();
+
+      const ctx1100 = document.getElementById("di1100Chart").getContext("2d");
+      const ctx245 = document.getElementById("di245Chart").getContext("2d");
+
+      // Destroy the previous chart instances if they exist
+      if (di1100Chart) {
+        di1100Chart.destroy();
+      }
+      if (di245Chart) {
+        di245Chart.destroy();
       }
 
-      // Function to generate a random color for each dataset
-      function getRandomColor() {
-        const r = Math.floor(Math.random() * 255);
-        const g = Math.floor(Math.random() * 255);
-        const b = Math.floor(Math.random() * 255);
-        return `rgba(${r}, ${g}, ${b}, 1)`;
-      }
-
-      // Function to create or update the charts
-      async function createCharts() {
-        const { labels, di1100Datasets, di245Datasets } = await fetchCSVData();
-
-        const ctx1100 = document.getElementById("di1100Chart").getContext("2d");
-        const ctx245 = document.getElementById("di245Chart").getContext("2d");
-
-        // Destroy the previous chart instances if they exist
-        if (di1100Chart) {
-          di1100Chart.destroy();
-        }
-        if (di245Chart) {
-          di245Chart.destroy();
-        }
-
-        // Create the DI-1100 chart
-        di1100Chart = new Chart(ctx1100, {
-          type: "line",
-          data: {
-            labels: labels,
-            datasets: di1100Datasets,
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            tooltips: {
-              enabled: true,
-              callbacks: {
-                label: (tooltipItem, data) =>
-                  `Time: ${tooltipItems[0].label}, ${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
-              },
+      // Create the DI-1100 chart
+      di1100Chart = new Chart(ctx1100, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: di1100Datasets,
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          tooltips: {
+            enabled: true,
+            callbacks: {
+              label: (tooltipItem, data) =>
+                `Time: ${tooltipItems[0].label}, ${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
             },
-            scales: {
-              x: {
-                type: "time",
-                time: {
-                  unit: "minute",
-                  tooltipFormat: "MMM dd, yyyy HH:mm:ss",
-                  displayFormats: {
-                    minute: "HH:mm:ss",
-                  },
+          },
+          scales: {
+            x: {
+              type: "time",
+              time: {
+                unit: "minute",
+                tooltipFormat: "MMM dd, yyyy HH:mm:ss",
+                displayFormats: {
+                  minute: "HH:mm:ss",
                 },
               },
-              y: {
-                beginAtZero: false,
-                type: "logarithmic",
-              },
+            },
+            y: {
+              beginAtZero: false,
+              type: "logarithmic",
             },
           },
-        });
+        },
+      });
 
-        // Create the DI-245 chart
-        di245Chart = new Chart(ctx245, {
-          type: "line",
-          data: {
-            labels: labels,
-            datasets: di245Datasets,
+      // Create the DI-245 chart
+      di245Chart = new Chart(ctx245, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: di245Datasets,
+        },
+        options: {
+          responsive: true,
+          hover: {
+            mode: "label",
           },
-          options: {
-            responsive: true,
-            hover: {
-              mode: "label",
+          maintainAspectRatio: true,
+          tooltips: {
+            enabled: true,
+            callbacks: {
+              label: (tooltipItem, data) =>
+                `Time: ${tooltipItems[0].label}, ${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
             },
-            maintainAspectRatio: true,
-            tooltips: {
-              enabled: true,
-              callbacks: {
-                label: (tooltipItem, data) =>
-                  `Time: ${tooltipItems[0].label}, ${tooltipItem.dataset.label}: ${tooltipItem.raw.y}`,
-              },
-            },
-            scales: {
-              x: {
-                type: "time",
-                time: {
-                  unit: "minute",
-                  tooltipFormat: "MMM dd, yyyy HH:mm:ss",
-                  displayFormats: {
-                    minute: "HH:mm:ss",
-                  },
+          },
+          scales: {
+            x: {
+              type: "time",
+              time: {
+                unit: "minute",
+                tooltipFormat: "MMM dd, yyyy HH:mm:ss",
+                displayFormats: {
+                  minute: "HH:mm:ss",
                 },
               },
-              y: {
-                beginAtZero: false,
-              },
+            },
+            y: {
+              beginAtZero: false,
             },
           },
-        });
-      }
+        },
+      });
+    }
 
-      // Call the function to create the charts
-      createCharts();
-    </script>
-  </body>
+    // Call the function to create the charts
+    createCharts();
+  </script>
+</body>
+
 </html>
