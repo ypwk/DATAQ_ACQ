@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CSV Data Plot</title>
+    <title>Temperature + Data Plots</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
@@ -15,19 +15,16 @@
         margin: 0;
         padding: 20px;
       }
-
-      h1 {
+      h1,
+      h2 {
         color: #333;
       }
-
-      canvas {
-        width: 80%;
-        height: 100%;
-        margin: auto;
-        margin-bottom: 40px;
-        color: #000;
+      .chart {
+        display: inline-block;
+        width: 90%;
+        height: 400px;
+        margin: 20px 0;
       }
-
       .controls {
         margin-bottom: 20px;
       }
@@ -44,132 +41,196 @@
       <button onclick="updateCharts()">Update Charts</button>
     </div>
     <h2>Pressure Data — mbar</h2>
-    <canvas id="di1100Chart"></canvas>
+    <canvas
+      id="di1100Chart"
+      style="
+        display: block;
+        box-sizing: border-box;
+        height: 495px;
+        width: 990px;
+      "
+      width="990"
+      height="495"
+    ></canvas>
     <h2>Thermocouple Data — Celsius</h2>
-    <canvas id="di245Chart"></canvas>
+    <canvas
+      id="di245Chart"
+      style="
+        display: block;
+        box-sizing: border-box;
+        height: 495px;
+        width: 990px;
+      "
+      width="990"
+      height="495"
+    ></canvas>
 
     <script>
+      const cloudfrontUrl =
+        "https://aqp-readout-data.s3.us-west-1.amazonaws.com";
+      const chunkDurationHours = 6;
+      let currentData = {
+        labels: [],
+        di1100Datasets: {},
+        di245Datasets: {},
+      };
+      let currentChunks = [];
       let di1100Chart, di245Chart;
 
-      async function fetchCSVData() {
-        try {
-          const response = await fetch(
-            "https://aqp-readout-data.s3.us-west-1.amazonaws.com/data/device_readings.csv"
+      function getColorKey(key) {
+        const colorMap = {
+          "DI-245 - 1 - 0": "rgba(31, 119, 180, 1)",
+          "DI-245 - 1 - 1": "rgba(255, 127, 14, 1)",
+          "DI-245 - 1 - 2": "rgba(44, 160, 44, 1)",
+          "DI-245 - 1 - 3": "rgba(214, 39, 40, 1)",
+          "DI-245 - 2 - 0": "rgba(148, 103, 189, 1)",
+          "DI-245 - 2 - 1": "rgba(140, 86, 75, 1)",
+          "DI-245 - 2 - 2": "rgba(227, 119, 194, 1)",
+          "DI-245 - 2 - 3": "rgba(127, 127, 127, 1)",
+        };
+        return colorMap[key] || "rgba(0, 0, 0, 1)";
+      }
+
+      function getChunkStartTimesInRange(
+        startDate,
+        endDate,
+        chunkDurationHours
+      ) {
+        const chunkDurationMs = chunkDurationHours * 60 * 60 * 1000;
+        const chunkStartTimes = [];
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        start.setMinutes(0, 0, 0);
+        end.setMinutes(0, 0, 0);
+
+        let currentChunkStart = new Date(
+          start.getTime() -
+            (start.getHours() % chunkDurationHours) * 60 * 60 * 1000
+        );
+        while (currentChunkStart <= end) {
+          chunkStartTimes.push(new Date(currentChunkStart));
+          currentChunkStart = new Date(
+            currentChunkStart.getTime() + chunkDurationMs
           );
-          const data = await response.text();
+        }
 
-          const rows = data.split("\n").map((row) => row.split(","));
-          const timestamps = [];
-          const di1100Datasets = {};
-          const di245Datasets = {};
-          const tcNames = {
-            "DI-245 - 1 - 0": "Ion Pump 2 Secondary",
-            "DI-245 - 1 - 1": "Ion Pump 1 Flange",
-            "DI-245 - 1 - 2": "Glass Cell 2",
-            "DI-245 - 1 - 3": "Main Body",
-            "DI-245 - 2 - 0": "Ion Pump 1",
-            "DI-245 - 2 - 1": "Ion Pump 2",
-            "DI-245 - 2 - 2": "Glass Cell 1",
-            "DI-245 - 2 - 3": "Titanium Pump",
-          };
+        return chunkStartTimes;
+      }
 
-          for (let i = 1; i < rows.length; i++) {
-            const [timestamp, deviceType, channel, type, value] = rows[i];
-            if (!isNaN(parseFloat(value))) {
-              const key = `${deviceType} - ${channel} - ${type}`;
-              if (!timestamps.includes(timestamp)) {
-                timestamps.push(timestamp);
-              }
-              if (deviceType === "DI-1100") {
-                if (!di1100Datasets[key]) {
-                  di1100Datasets[key] = {
-                    label: key,
-                    data: [],
-                    backgroundColor: getColorKey(key),
-                    borderWidth: 1,
-                  };
-                }
-                di1100Datasets[key].data.push({
-                  x: timestamp,
-                  y: parseFloat(value),
-                });
-              } else if (deviceType === "DI-245") {
-                if (!di245Datasets[key]) {
-                  di245Datasets[key] = {
-                    label: tcNames[key],
-                    data: [],
-                    backgroundColor: getColorKey(key),
-                    borderWidth: 1,
-                  };
-                }
-                di245Datasets[key].data.push({
-                  x: timestamp,
-                  y: parseFloat(value),
-                });
-              }
+      function getChunkFilename(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const hour = String(date.getHours()).padStart(2, "0");
+        return `data/device_readings_${year}${month}${day}_${hour}00.csv`;
+      }
+
+      async function fetchCsvData(filename) {
+        const response = await fetch(`${cloudfrontUrl}/${filename}`);
+        if (!response.ok) {
+          console.error(`Failed to fetch ${filename}`);
+          return null;
+        }
+        return await response.text();
+      }
+
+      async function fetchChunksInRange(startDate, endDate) {
+        const chunkTimes = getChunkStartTimesInRange(
+          startDate,
+          endDate,
+          chunkDurationHours
+        );
+
+        for (const chunkTime of chunkTimes) {
+          console.log(chunkTime);
+          console.log(currentChunks);
+
+          // Check if `chunkTime` is a value in `currentChunks`
+          if (
+            !currentChunks.some(
+              (date) => date.getTime() === chunkTime.getTime()
+            )
+          ) {
+            const filename = getChunkFilename(chunkTime);
+            console.log(`Fetching ${filename}...`);
+
+            const csvData = await fetchCsvData(filename);
+            if (csvData) {
+              parseAndAddCsvData(csvData, currentData); // Add data to currentData
             }
-          }
 
-          return {
-            labels: timestamps,
-            di1100Datasets: Object.values(di1100Datasets),
-            di245Datasets: Object.values(di245Datasets),
-          };
-        } catch (error) {
-          console.error("Error fetching CSV data:", error);
+            currentChunks.push(chunkTime); // Add chunkTime to currentChunks
+            currentChunks.sort((a, b) => a.getTime() - b.getTime()); // Sort by timestamp
+          }
         }
       }
 
-      const colorMap = {
-        "DI-245 - 1 - 0": "rgba(31, 119, 180, 1)",
-        "DI-245 - 1 - 1": "rgba(255, 127, 14, 1)",
-        "DI-245 - 1 - 2": "rgba(44, 160, 44, 1)",
-        "DI-245 - 1 - 3": "rgba(214, 39, 40, 1)",
-        "DI-245 - 2 - 0": "rgba(148, 103, 189, 1)",
-        "DI-245 - 2 - 1": "rgba(140, 86, 75, 1)",
-        "DI-245 - 2 - 2": "rgba(227, 119, 194, 1)",
-        "DI-245 - 2 - 3": "rgba(127, 127, 127, 1)",
-      };
+      function parseAndAddCsvData(csvData, allData) {
+        const rows = csvData
+          .trim()
+          .split("\n")
+          .map((row) => row.split(","));
+        const tcNames = {
+          "DI-245 - 1 - 0": "Ion Pump 2 Secondary",
+          "DI-245 - 1 - 1": "Ion Pump 1 Flange",
+          "DI-245 - 1 - 2": "Glass Cell 2",
+          "DI-245 - 1 - 3": "Main Body",
+          "DI-245 - 2 - 0": "Ion Pump 1",
+          "DI-245 - 2 - 1": "Ion Pump 2",
+          "DI-245 - 2 - 2": "Glass Cell 1",
+          "DI-245 - 2 - 3": "Titanium Pump",
+        };
 
-      function getColorKey(key) {
-        return colorMap[key];
-      }
+        for (let i = 1; i < rows.length; i++) {
+          const [timestamp, deviceType, channel, type, value] = rows[i];
+          if (!isNaN(parseFloat(value))) {
+            const key = `${deviceType} - ${channel} - ${type}`;
+            if (!allData.labels.includes(timestamp)) {
+              allData.labels.push(timestamp);
+            }
+            if (deviceType === "DI-1100") {
+              if (!allData.di1100Datasets[key]) {
+                allData.di1100Datasets[key] = {
+                  label: key,
+                  data: [],
+                  backgroundColor: getColorKey(key),
+                  borderWidth: 1,
+                };
+              }
+              allData.di1100Datasets[key].data.push({
+                x: timestamp,
+                y: parseFloat(value),
+              });
+            } else if (deviceType === "DI-245" && parseFloat(value) > 10) {
+              if (!allData.di245Datasets[key]) {
+                allData.di245Datasets[key] = {
+                  label: tcNames[key],
+                  data: [],
+                  backgroundColor: getColorKey(key),
+                  borderWidth: 1,
+                };
+              }
+              allData.di245Datasets[key].data.push({
+                x: timestamp,
+                y: parseFloat(value),
+              });
+            }
+          }
+        }
 
-      async function createCharts(startDate, endDate) {
-        const { labels, di1100Datasets, di245Datasets } = await fetchCSVData();
-
-        const filteredDi1100Datasets = filterDataByDateRange(
-          di1100Datasets,
-          startDate,
-          endDate
-        );
-        const filteredDi245Datasets = filterDataByDateRange(
-          di245Datasets,
-          startDate,
-          endDate
-        );
-
-        const ctx1100 = document.getElementById("di1100Chart").getContext("2d");
-        const ctx245 = document.getElementById("di245Chart").getContext("2d");
-
-        if (di1100Chart) di1100Chart.destroy();
-        if (di245Chart) di245Chart.destroy();
-
-        di1100Chart = new Chart(ctx1100, {
-          type: "line",
-          data: { datasets: filteredDi1100Datasets },
-          options: chartLogOptions,
+        // Sort data by timestamp for each dataset
+        Object.values(allData.di1100Datasets).forEach((dataset) => {
+          dataset.data.sort((a, b) => new Date(a.x) - new Date(b.x));
         });
 
-        di245Chart = new Chart(ctx245, {
-          type: "line",
-          data: { datasets: filteredDi245Datasets },
-          options: chartOptions,
+        Object.values(allData.di245Datasets).forEach((dataset) => {
+          dataset.data.sort((a, b) => new Date(a.x) - new Date(b.x));
         });
       }
 
       function filterDataByDateRange(datasets, startDate, endDate) {
-        return datasets.map((dataset) => ({
+        return Object.values(datasets).map((dataset) => ({
           ...dataset,
           data: dataset.data.filter((point) => {
             const time = new Date(point.x).getTime();
@@ -217,13 +278,63 @@
         pointBorderColor: "rgba(0, 0, 0, 0.1)",
       };
 
-      function updateCharts() {
+      async function updateCharts() {
         const startDate = document.getElementById("start-date").value;
         const endDate = document.getElementById("end-date").value;
-        createCharts(startDate, endDate);
+
+        // Fetch additional data if requested range extends beyond currentData range
+        await fetchChunksInRange(startDate, endDate);
+
+        createCharts(currentData, startDate, endDate);
       }
 
-      createCharts();
+      async function createCharts(data, startDate, endDate) {
+        const { labels, di1100Datasets, di245Datasets } = data;
+
+        const filteredDi1100Datasets = filterDataByDateRange(
+          di1100Datasets,
+          startDate,
+          endDate
+        );
+        const filteredDi245Datasets = filterDataByDateRange(
+          di245Datasets,
+          startDate,
+          endDate
+        );
+
+        const ctx1100 = document.getElementById("di1100Chart").getContext("2d");
+        const ctx245 = document.getElementById("di245Chart").getContext("2d");
+
+        if (di1100Chart) {
+          console.log(di1100Chart);
+          di1100Chart.destroy();
+        }
+        if (di245Chart) di245Chart.destroy();
+
+        di1100Chart = new Chart(ctx1100, {
+          type: "line",
+          data: { datasets: filteredDi1100Datasets },
+          options: chartLogOptions,
+        });
+
+        di245Chart = new Chart(ctx245, {
+          type: "line",
+          data: { datasets: filteredDi245Datasets },
+          options: chartOptions,
+        });
+      }
+
+      window.onload = function () {
+        const now = new Date();
+        const rnow = new Date(now.getTime() - 8 * 60 * 60 * 1000);
+        const sixHoursAgo = new Date(rnow.getTime() - 6 * 60 * 60 * 1000);
+        const formatDate = (date) => date.toISOString().slice(0, 16);
+
+        document.getElementById("start-date").value = formatDate(sixHoursAgo);
+        document.getElementById("end-date").value = formatDate(rnow);
+
+        updateCharts();
+      };
     </script>
   </body>
 </html>

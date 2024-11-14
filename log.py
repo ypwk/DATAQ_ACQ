@@ -9,9 +9,10 @@ import time
 import boto3
 
 TC_TYPE = "K"  # Thermocouple type for DI-245
-LOG_FILE = "data/device_readings.csv"  # Output file path
+LOG_DIR = "data"
 TIME_PER_LOG = timedelta(minutes=1)
 TIME_PER_UPLOAD = timedelta(minutes=5)
+CHUNK_DURATION = timedelta(hours=6)
 VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
 REGION_NAME = "us-west-1"
@@ -22,36 +23,84 @@ print_lock = threading.Lock()
 last_log_time = []
 last_upload_time = datetime.now()
 current_device_index = 0
+current_log_file = None
+current_chunk_start_time = None
 
 verboseprint = print if VERBOSE else lambda *a, **k: None
 
 s3_client = boto3.client("s3", region_name=REGION_NAME)
 
 
+def get_current_chunk_start_time():
+    """Calculate the start time of the current chunk based on the current time."""
+    now = datetime.now()
+    chunk_hour = (now.hour // 6) * 6
+    return now.replace(hour=chunk_hour, minute=0, second=0, microsecond=0)
+
+
+def get_chunk_file_name(start_time):
+    """Generate a timestamped filename for a 6-hour chunk."""
+    return f"device_readings_{start_time.strftime('%Y%m%d_%H%M')}.csv"
+
+
 def upload_file_to_s3(file_name, bucket_name):
     global last_upload_time
-    if datetime.now() - TIME_PER_UPLOAD > last_upload_time:
+    if datetime.now() - last_upload_time > TIME_PER_UPLOAD:
         last_upload_time = datetime.now()
+        initialize_log_file()
+        tsfn = get_chunk_file_name(current_chunk_start_time)
+
         try:
-            s3_client.upload_file(file_name, bucket_name, file_name)
-            verboseprint(f"File {file_name} uploaded successfully to {bucket_name}")
+            s3_client.upload_file(file_name, bucket_name, tsfn)
+            verboseprint(f"File {tsfn} uploaded successfully to {bucket_name}")
         except Exception as e:
-            print(f"Failed to upload {file_name} to S3: {e}")
+            print(f"Failed to upload {tsfn} to S3: {e}")
 
 
 def initialize_log_file():
-    if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, mode="w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                ["Timestamp", "Device Name", "Device ID", "Channel", "Value"]
-            )
+    global current_log_file, current_chunk_start_time
+    new_chunk_start_time = get_current_chunk_start_time()
+
+    # 1a. first initialization, current log file is none
+    if current_log_file is None:
+        current_log_file = os.path.join(
+            LOG_DIR, get_chunk_file_name(new_chunk_start_time)
+        )
+
+    # 1b. first initialization, current chunk start time is none
+    if current_chunk_start_time is None:
+        current_chunk_start_time = new_chunk_start_time
+
+    # 2. chunk times are misaligned, upload previous chunk file and start new one in 3.
+    if new_chunk_start_time != current_chunk_start_time:
+        if current_log_file and os.path.exists(current_log_file):
+            try:
+                s3_client.upload_file(
+                    current_log_file,
+                    BUCKET_NAME,
+                    os.path.basename(current_log_file),
+                )
+                verboseprint(
+                    f"File {current_log_file} uploaded successfully to {BUCKET_NAME}"
+                )
+            except Exception as e:
+                print(f"Failed to upload {current_log_file} to S3: {e}")
+
+        current_chunk_start_time = new_chunk_start_time
+        current_log_file = os.path.join(
+            LOG_DIR, get_chunk_file_name(new_chunk_start_time)
+        )
+
+    # 3. set up new chunk file.
+    if not os.path.exists(current_log_file):
+        with open(current_log_file, mode="w", newline="") as _:
+            pass
 
 
 def log_to_file(device_id, device_type, channel, value):
     """Log readings to a CSV file."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, mode="a", newline="") as f:
+    with open(current_log_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([timestamp, device_type, device_id, channel, value])
 
@@ -72,7 +121,7 @@ def log_temperature(temperature_buffer, channel_config, device_id):
 
     verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    upload_file_to_s3(LOG_FILE, BUCKET_NAME)
+    upload_file_to_s3(current_log_file, BUCKET_NAME)
 
 
 def log_pressure(voltage_buffer, channel_config, device_id):
@@ -91,7 +140,7 @@ def log_pressure(voltage_buffer, channel_config, device_id):
 
     verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    upload_file_to_s3(LOG_FILE, BUCKET_NAME)
+    upload_file_to_s3(current_log_file, BUCKET_NAME)
 
 
 def start_device_threads(devices, manage_device_func, channel_config, dev_type):
