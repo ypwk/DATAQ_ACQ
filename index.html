@@ -276,6 +276,17 @@
         },
         tension: 0.1,
         pointBorderColor: "rgba(0, 0, 0, 0.1)",
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                const label = context.dataset.label || "";
+                const yValue = Number(context.raw.y); // Ensure the y-axis value is treated as a number
+                return `${label}: ${yValue.toExponential(2)}`; // Format in scientific notation
+              },
+            },
+          },
+        },
       };
 
       async function updateCharts() {
