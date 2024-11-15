@@ -17,6 +17,12 @@ VERBOSE = False
 BUCKET_NAME = "aqp-readout-data"
 REGION_NAME = "us-west-1"
 
+#####################
+# ALARM QUANTITIES
+MAX_THRESHOLD = 75
+MIN_THRESHOLD = 25
+#####################
+
 stop_event = threading.Event()
 print_lock = threading.Lock()
 
@@ -29,6 +35,12 @@ current_chunk_start_time = None
 verboseprint = print if VERBOSE else lambda *a, **k: None
 
 s3_client = boto3.client("s3", region_name=REGION_NAME)
+sns_client = boto3.client("sns")
+SNS_TOPIC_ARN = "arn:aws:sns:us-west-1:730335412791:BakeoutAlarm"
+
+
+def send_sns_alert(subject, message):
+    sns_client.publish(TopicArn=SNS_TOPIC_ARN, Subject=subject, Message=message)
 
 
 def get_current_chunk_start_time():
@@ -105,6 +117,18 @@ def log_to_file(device_id, device_type, channel, value):
         writer.writerow([timestamp, device_type, device_id, channel, value])
 
 
+nameMapping = {
+    "DI-245 - 1 - 0": "Ion Pump 2 Secondary",
+    "DI-245 - 1 - 1": "Ion Pump 1 Flange",
+    "DI-245 - 1 - 2": "Glass Cell 2",
+    "DI-245 - 1 - 3": "Main Body",
+    "DI-245 - 2 - 0": "Ion Pump 1",
+    "DI-245 - 2 - 1": "Ion Pump 2",
+    "DI-245 - 2 - 2": "Glass Cell 1",
+    "DI-245 - 2 - 3": "Titanium Pump",
+}
+
+
 def log_temperature(temperature_buffer, channel_config, device_id):
     """Log temperature readings from DI-245."""
     global last_log_time
@@ -118,6 +142,17 @@ def log_temperature(temperature_buffer, channel_config, device_id):
             channel_type = channel_config[i]
             verboseprint(f"{i:<10}{channel_type:<10}{temp:<15.2f}")
             log_to_file(device_id, "DI-245", i, temp)
+
+            if temp > MAX_THRESHOLD or temp < MIN_THRESHOLD:
+                alert_subject = "Data Logger Alert: Threshold Exceeded"
+                alert_message = (
+                    f"Threshold violation detected:\n"
+                    f"File: {nameMapping['DI-245 - ' + str(device_id + 1) + ' - ' + str(i)]}\n"
+                    f"Max Value: {temp} (Threshold: {MAX_THRESHOLD})\n"
+                    f"Min Value: {temp} (Threshold: {MIN_THRESHOLD})\n"
+                    f"Time: {datetime.utcnow().isoformat()}"
+                )
+                send_sns_alert(alert_subject, alert_message)
 
     verboseprint(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
