@@ -19,8 +19,8 @@ REGION_NAME = "us-west-1"
 
 #####################
 # ALARM QUANTITIES
-MAX_THRESHOLD = 75
-MIN_THRESHOLD = 25
+MAX_THRESHOLD = 100
+MIN_THRESHOLD = 65
 #####################
 
 stop_event = threading.Event()
@@ -38,10 +38,8 @@ s3_client = boto3.client("s3", region_name=REGION_NAME)
 sns_client = boto3.client("sns")
 SNS_TOPIC_ARN = "arn:aws:sns:us-west-1:730335412791:BakeoutAlarm"
 
-
 def send_sns_alert(subject, message):
     sns_client.publish(TopicArn=SNS_TOPIC_ARN, Subject=subject, Message=message)
-
 
 def get_current_chunk_start_time():
     """Calculate the start time of the current chunk based on the current time."""
@@ -63,7 +61,7 @@ def upload_file_to_s3(file_name, bucket_name):
         tsfn = get_chunk_file_name(current_chunk_start_time)
 
         try:
-            s3_client.upload_file(file_name, bucket_name, tsfn)
+            s3_client.upload_file(file_name, bucket_name, "data/" + tsfn)
             verboseprint(f"File {tsfn} uploaded successfully to {bucket_name}")
         except Exception as e:
             print(f"Failed to upload {tsfn} to S3: {e}")
@@ -147,10 +145,10 @@ def log_temperature(temperature_buffer, channel_config, device_id):
                 alert_subject = "Data Logger Alert: Threshold Exceeded"
                 alert_message = (
                     f"Threshold violation detected:\n"
-                    f"File: {nameMapping['DI-245 - ' + str(device_id + 1) + ' - ' + str(i)]}\n"
+                    f"File: {nameMapping['DI-245 - ' + str(device_id) + ' - ' + str(i)]}\n"
                     f"Max Value: {temp} (Threshold: {MAX_THRESHOLD})\n"
                     f"Min Value: {temp} (Threshold: {MIN_THRESHOLD})\n"
-                    f"Time: {datetime.utcnow().isoformat()}"
+                    f"Time: {datetime.now().isoformat()}"
                 )
                 send_sns_alert(alert_subject, alert_message)
 
